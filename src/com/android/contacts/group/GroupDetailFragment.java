@@ -31,7 +31,6 @@ import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.ContactsContract.Groups;
-import android.text.TextUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -45,16 +44,13 @@ import android.widget.AbsListView.OnScrollListener;
 import android.widget.ListView;
 import android.widget.TextView;
 
-import com.android.contacts.GroupMemberLoader;
-import com.android.contacts.GroupMetaDataLoader;
 import com.android.contacts.R;
 import com.android.contacts.common.ContactPhotoManager;
-import com.android.contacts.interactions.GroupDeletionDialogFragment;
 import com.android.contacts.common.list.ContactTileAdapter;
 import com.android.contacts.common.list.ContactTileView;
-import com.android.contacts.list.GroupMemberTileAdapter;
-import com.android.contacts.common.model.AccountTypeManager;
 import com.android.contacts.common.model.account.AccountType;
+import com.android.contacts.interactions.GroupDeletionDialogFragment;
+import com.android.contacts.list.GroupMemberTileAdapter;
 
 /**
  * Displays the details of a group and shows a list of actions possible for the group.
@@ -107,20 +103,12 @@ public class GroupDetailFragment extends Fragment implements OnScrollListener {
 
     private ContactTileAdapter mAdapter;
     private ContactPhotoManager mPhotoManager;
-    private AccountTypeManager mAccountTypeManager;
-
-    private Uri mGroupUri;
-    private long mGroupId;
-    private String mGroupName;
-    private String mAccountTypeString;
-    private String mDataSet;
-    private boolean mIsReadOnly;
-    private boolean mIsMembershipEditable;
-
-    private boolean mShowGroupActionInActionBar;
+    
     private boolean mOptionsMenuGroupDeletable;
     private boolean mOptionsMenuGroupEditable;
     private boolean mCloseActivityAfterDelete;
+
+	private GroupDetailPresenter groupDetailPresenter;
 
     public GroupDetailFragment() {
     }
@@ -129,15 +117,16 @@ public class GroupDetailFragment extends Fragment implements OnScrollListener {
     public void onAttach(Activity activity) {
         super.onAttach(activity);
         mContext = activity;
-        mAccountTypeManager = AccountTypeManager.getInstance(mContext);
-
-        Resources res = getResources();
-        int columnCount = res.getInteger(R.integer.contact_tile_column_count);
-
-        mAdapter = new GroupMemberTileAdapter(activity, mContactTileListener, columnCount);
-
-        configurePhotoLoader();
+        groupDetailPresenter = new GroupDetailPresenter(this);
+        groupDetailPresenter.performOnAttach();
     }
+
+    //DONE
+	void buildContactAdapter() {
+		Resources res = getResources();
+        int columnCount = res.getInteger(R.integer.contact_tile_column_count);
+        mAdapter = new GroupMemberTileAdapter(mContext, mContactTileListener, columnCount);
+	}
 
     @Override
     public void onDetach() {
@@ -157,20 +146,20 @@ public class GroupDetailFragment extends Fragment implements OnScrollListener {
         mMemberListView = (ListView) mRootView.findViewById(android.R.id.list);
         mMemberListView.setItemsCanFocus(true);
         mMemberListView.setAdapter(mAdapter);
-
         return mRootView;
     }
 
     public void loadGroup(Uri groupUri) {
-        mGroupUri= groupUri;
-        startGroupMetadataLoader();
+        groupDetailPresenter.loadGroup( groupUri);
+        
     }
 
     public void setQuickContact(boolean enableQuickContact) {
         mAdapter.enableQuickContact(enableQuickContact);
     }
 
-    private void configurePhotoLoader() {
+    //DONE
+    void configurePhotoLoader() {
         if (mContext != null) {
             if (mPhotoManager == null) {
                 mPhotoManager = ContactPhotoManager.getInstance(mContext);
@@ -189,24 +178,24 @@ public class GroupDetailFragment extends Fragment implements OnScrollListener {
     }
 
     public void setShowGroupSourceInActionBar(boolean show) {
-        mShowGroupActionInActionBar = show;
+        this.groupDetailPresenter.setShowGroupSourceInActionBar(show);
     }
 
     public Uri getGroupUri() {
-        return mGroupUri;
+        return groupDetailPresenter.getGroupUri();
     }
 
     /**
      * Start the loader to retrieve the metadata for this group.
      */
-    private void startGroupMetadataLoader() {
+    void startGroupMetadataLoader() {
         getLoaderManager().restartLoader(LOADER_METADATA, null, mGroupMetadataLoaderListener);
     }
 
     /**
      * Start the loader to retrieve the list of group members.
      */
-    private void startGroupMembersLoader() {
+    void startGroupMembersLoader() {
         getLoaderManager().restartLoader(LOADER_MEMBERS, null, mGroupMemberListLoaderListener);
     }
 
@@ -238,71 +227,91 @@ public class GroupDetailFragment extends Fragment implements OnScrollListener {
 
         @Override
         public CursorLoader onCreateLoader(int id, Bundle args) {
-            return new GroupMetaDataLoader(mContext, mGroupUri);
+            return groupDetailPresenter.createGroupMetadataLoader();
         }
 
         @Override
         public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
-            data.moveToPosition(-1);
-            if (data.moveToNext()) {
-                boolean deleted = data.getInt(GroupMetaDataLoader.DELETED) == 1;
-                if (!deleted) {
-                    bindGroupMetaData(data);
-
-                    // Retrieve the list of members
-                    startGroupMembersLoader();
-                    return;
-                }
-            }
-            updateSize(-1);
-            updateTitle(null);
+        	groupDetailPresenter.performGroupLoadFinished(data);
         }
 
         @Override
         public void onLoaderReset(Loader<Cursor> loader) {}
     };
+    
 
     /**
      * The listener for the group members list loader
      */
-    private final LoaderManager.LoaderCallbacks<Cursor> mGroupMemberListLoaderListener =
+    private final LoaderManager.LoaderCallbacks<Cursor> mGroupMemberListLoaderListener = //TODO Presenter pode implementar essa interface
             new LoaderCallbacks<Cursor>() {
 
         @Override
         public CursorLoader onCreateLoader(int id, Bundle args) {
-            return GroupMemberLoader.constructLoaderForGroupDetailQuery(mContext, mGroupId);
+            return groupDetailPresenter.creatGroupMemberListLoader();
         }
 
         @Override
         public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
-            updateSize(data.getCount());
-            mAdapter.setContactCursor(data);
-            mMemberListView.setEmptyView(mEmptyView);
+        	groupDetailPresenter.onMemberListLoadFinished(data);
+            extracted(data);
         }
 
         @Override
         public void onLoaderReset(Loader<Cursor> loader) {}
     };
+    
+	private void extracted(Cursor data) {
+		mAdapter.setContactCursor(data);
+        mMemberListView.setEmptyView(mEmptyView);
+	}
 
-    private void bindGroupMetaData(Cursor cursor) {
-        cursor.moveToPosition(-1);
-        if (cursor.moveToNext()) {
-            mAccountTypeString = cursor.getString(GroupMetaDataLoader.ACCOUNT_TYPE);
-            mDataSet = cursor.getString(GroupMetaDataLoader.DATA_SET);
-            mGroupId = cursor.getLong(GroupMetaDataLoader.GROUP_ID);
-            mGroupName = cursor.getString(GroupMetaDataLoader.TITLE);
-            mIsReadOnly = cursor.getInt(GroupMetaDataLoader.IS_READ_ONLY) == 1;
-            updateTitle(mGroupName);
-            // Must call invalidate so that the option menu will get updated
-            getActivity().invalidateOptionsMenu ();
+	void rebindDataToGroupSourceView(final String accountTypeString,
+			final String dataSet, final AccountType accountType) {
+		mGroupSourceView.setVisibility(View.VISIBLE);
+		GroupDetailDisplayUtils.bindGroupSourceView(mContext, mGroupSourceView,
+		        accountTypeString, dataSet);
+		mGroupSourceView.setOnClickListener(new OnClickListener() {
+		    @Override
+		    public void onClick(View v) {
+		        final Uri uri = ContentUris.withAppendedId(Groups.CONTENT_URI, groupDetailPresenter.getGroupId());
+		        final Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+		        intent.setClassName(accountType.syncAdapterPackageName,
+		                accountType.getViewGroupActivity());
+		        startActivity(intent);
+		    }
+		});
+	}
 
-            final String accountTypeString = cursor.getString(GroupMetaDataLoader.ACCOUNT_TYPE);
-            final String dataSet = cursor.getString(GroupMetaDataLoader.DATA_SET);
-            updateAccountType(accountTypeString, dataSet);
-        }
-    }
+	void hideGroupSourceView() {
+		mGroupSourceView.setVisibility(View.GONE);
+	}
 
-    private void updateTitle(String title) {
+	void onAccountTypeUpdated(final String accountTypeString, final String dataSet) {
+		mListener.onAccountTypeUpdated(accountTypeString, dataSet);
+	}
+
+	void addGroupSourceViewToContainer() {
+		mGroupSourceViewContainer.addView(mGroupSourceView);
+	}
+
+	boolean hasGroupSourceViewContainer() {
+		return mGroupSourceViewContainer != null;
+	}
+
+	void createGroupSourceView() {
+		mGroupSourceView = GroupDetailDisplayUtils.getNewGroupSourceView(mContext);
+	}
+
+	boolean hasNotGroupSourceView() {
+		return mGroupSourceView == null;
+	}
+
+	void refreshOptions() {
+		getActivity().invalidateOptionsMenu ();
+	}
+
+    void updateTitle(String title) {
         if (mGroupTitle != null) {
             mGroupTitle.setText(title);
         } else {
@@ -310,84 +319,15 @@ public class GroupDetailFragment extends Fragment implements OnScrollListener {
         }
     }
 
-    /**
-     * Display the count of the number of group members.
-     * @param size of the group (can be -1 if no size could be determined)
-     */
-    private void updateSize(int size) {
-        String groupSizeString;
-        if (size == -1) {
-            groupSizeString = null;
-        } else {
-            String groupSizeTemplateString = getResources().getQuantityString(
-                    R.plurals.num_contacts_in_group, size);
-            AccountType accountType = mAccountTypeManager.getAccountType(mAccountTypeString,
-                    mDataSet);
-            groupSizeString = String.format(groupSizeTemplateString, size,
-                    accountType.getDisplayLabel(mContext));
-        }
 
-        if (mGroupSize != null) {
+	void updateGroupSizeView(String groupSizeString) {
+		if (mGroupSize != null) {
             mGroupSize.setText(groupSizeString);
         } else {
             mListener.onGroupSizeUpdated(groupSizeString);
         }
-    }
+	}
 
-    /**
-     * Once the account type, group source action, and group source URI have been determined
-     * (based on the result from the {@link Loader}), then we can display this to the user in 1 of
-     * 2 ways depending on screen size and orientation: either as a button in the action bar or as
-     * a button in a static header on the page.
-     * We also use isGroupMembershipEditable() of accountType to determine whether or not we should
-     * display the Edit option in the Actionbar.
-     */
-    private void updateAccountType(final String accountTypeString, final String dataSet) {
-        final AccountTypeManager manager = AccountTypeManager.getInstance(getActivity());
-        final AccountType accountType =
-                manager.getAccountType(accountTypeString, dataSet);
-
-        mIsMembershipEditable = accountType.isGroupMembershipEditable();
-
-        // If the group action should be shown in the action bar, then pass the data to the
-        // listener who will take care of setting up the view and click listener. There is nothing
-        // else to be done by this {@link Fragment}.
-        if (mShowGroupActionInActionBar) {
-            mListener.onAccountTypeUpdated(accountTypeString, dataSet);
-            return;
-        }
-
-        // Otherwise, if the {@link Fragment} needs to create and setup the button, then first
-        // verify that there is a valid action.
-        if (!TextUtils.isEmpty(accountType.getViewGroupActivity())) {
-            if (mGroupSourceView == null) {
-                mGroupSourceView = GroupDetailDisplayUtils.getNewGroupSourceView(mContext);
-                // Figure out how to add the view to the fragment.
-                // If there is a static header with a container for the group source view, insert
-                // the view there.
-                if (mGroupSourceViewContainer != null) {
-                    mGroupSourceViewContainer.addView(mGroupSourceView);
-                }
-            }
-
-            // Rebind the data since this action can change if the loader returns updated data
-            mGroupSourceView.setVisibility(View.VISIBLE);
-            GroupDetailDisplayUtils.bindGroupSourceView(mContext, mGroupSourceView,
-                    accountTypeString, dataSet);
-            mGroupSourceView.setOnClickListener(new OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    final Uri uri = ContentUris.withAppendedId(Groups.CONTENT_URI, mGroupId);
-                    final Intent intent = new Intent(Intent.ACTION_VIEW, uri);
-                    intent.setClassName(accountType.syncAdapterPackageName,
-                            accountType.getViewGroupActivity());
-                    startActivity(intent);
-                }
-            });
-        } else if (mGroupSourceView != null) {
-            mGroupSourceView.setVisibility(View.GONE);
-        }
-    }
 
     @Override
     public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount,
@@ -414,11 +354,11 @@ public class GroupDetailFragment extends Fragment implements OnScrollListener {
     }
 
     public boolean isGroupDeletable() {
-        return mGroupUri != null && !mIsReadOnly;
+        return groupDetailPresenter.isGroupDeletable();
     }
 
     public boolean isGroupEditableAndPresent() {
-        return mGroupUri != null && mIsMembershipEditable;
+        return groupDetailPresenter.isGroupEditableAndPresent();
     }
 
     @Override
@@ -437,11 +377,11 @@ public class GroupDetailFragment extends Fragment implements OnScrollListener {
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
             case R.id.menu_edit_group: {
-                if (mListener != null) mListener.onEditRequested(mGroupUri);
+                if (mListener != null) mListener.onEditRequested(groupDetailPresenter.getGroupUri());
                 break;
             }
             case R.id.menu_delete_group: {
-                GroupDeletionDialogFragment.show(getFragmentManager(), mGroupId, mGroupName,
+                GroupDeletionDialogFragment.show(getFragmentManager(), groupDetailPresenter.getGroupId(), groupDetailPresenter.getGroupName(),
                         mCloseActivityAfterDelete);
                 return true;
             }
@@ -454,6 +394,6 @@ public class GroupDetailFragment extends Fragment implements OnScrollListener {
     }
 
     public long getGroupId() {
-        return mGroupId;
+        return groupDetailPresenter.getGroupId();
     }
 }
