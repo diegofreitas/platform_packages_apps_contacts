@@ -44,9 +44,8 @@ import android.widget.TextView;
 
 import com.android.contacts.GroupListLoader;
 import com.android.contacts.R;
-import com.android.contacts.group.GroupBrowseListAdapter.GroupListItemViewCache;
-import com.android.contacts.common.ContactsUtils;
 import com.android.contacts.common.list.AutoScrollListView;
+import com.android.contacts.group.GroupBrowseListAdapter.GroupListItemViewCache;
 
 /**
  * Fragment to display the list of groups.
@@ -73,11 +72,10 @@ public class GroupBrowseListFragment extends Fragment
     private static final int LOADER_GROUPS = 1;
 
     private Context mContext;
-    private Cursor mGroupListCursor;
 
-    private boolean mSelectionToScreenRequested;
 
-    private static final String EXTRA_KEY_GROUP_URI = "groups.groupUri";
+    
+  
 
     private View mRootView;
     private AutoScrollListView mListView;
@@ -86,12 +84,13 @@ public class GroupBrowseListFragment extends Fragment
     private View mAddAccountButton;
 
     private GroupBrowseListAdapter mAdapter;
-    private boolean mSelectionVisible;
-    private Uri mSelectedGroupUri;
+
 
     private int mVerticalScrollbarPosition = View.SCROLLBAR_POSITION_RIGHT;
 
     private OnGroupBrowserActionListener mListener;
+
+	private GroupBrowseListPresenter presenter;
 
     public GroupBrowseListFragment() {
     }
@@ -99,24 +98,35 @@ public class GroupBrowseListFragment extends Fragment
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
             Bundle savedInstanceState) {
-        if (savedInstanceState != null) {
-            mSelectedGroupUri = savedInstanceState.getParcelable(EXTRA_KEY_GROUP_URI);
-            if (mSelectedGroupUri != null) {
-                // The selection may be out of screen, if rotated from portrait to landscape,
-                // so ensure it's visible.
-                mSelectionToScreenRequested = true;
-            }
-        }
+    	presenter = new GroupBrowseListPresenter(this);
 
         mRootView = inflater.inflate(R.layout.group_browse_list_fragment, null);
         mEmptyView = (TextView)mRootView.findViewById(R.id.empty);
-
-        mAdapter = new GroupBrowseListAdapter(mContext);
-        mAdapter.setSelectionVisible(mSelectionVisible);
-        mAdapter.setSelectedGroup(mSelectedGroupUri);
-
+        mAddAccountsView = mRootView.findViewById(R.id.add_accounts);
+        mAddAccountButton = mRootView.findViewById(R.id.add_account_button);
         mListView = (AutoScrollListView) mRootView.findViewById(R.id.list);
-        mListView.setOnFocusChangeListener(this);
+
+        
+        
+        mAddAccountButton.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(Settings.ACTION_ADD_ACCOUNT);
+                intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET);
+                intent.putExtra(Settings.EXTRA_AUTHORITIES,
+                        new String[] { ContactsContract.AUTHORITY });
+                startActivity(intent);
+            }
+        });
+       
+        presenter.init(savedInstanceState);
+        return mRootView;
+    }
+
+	
+
+	void setupListView() {
+		mListView.setOnFocusChangeListener(this);
         mListView.setOnTouchListener(this);
         mListView.setAdapter(mAdapter);
         mListView.setOnItemClickListener(new OnItemClickListener() {
@@ -128,26 +138,9 @@ public class GroupBrowseListFragment extends Fragment
                 }
             }
         });
-
         mListView.setEmptyView(mEmptyView);
-        configureVerticalScrollbar();
-
-        mAddAccountsView = mRootView.findViewById(R.id.add_accounts);
-        mAddAccountButton = mRootView.findViewById(R.id.add_account_button);
-        mAddAccountButton.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent intent = new Intent(Settings.ACTION_ADD_ACCOUNT);
-                intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET);
-                intent.putExtra(Settings.EXTRA_AUTHORITIES,
-                        new String[] { ContactsContract.AUTHORITY });
-                startActivity(intent);
-            }
-        });
-        setAddAccountsVisibility(!ContactsUtils.areGroupWritableAccountsAvailable(mContext));
-
-        return mRootView;
-    }
+        mAdapter = new GroupBrowseListAdapter(mContext);
+	}
 
     public void setVerticalScrollbarPosition(int position) {
         mVerticalScrollbarPosition = position;
@@ -156,7 +149,8 @@ public class GroupBrowseListFragment extends Fragment
         }
     }
 
-    private void configureVerticalScrollbar() {
+    //The logic implemented here does not depends on the model.
+    void configureVerticalScrollbar() {
         mListView.setVerticalScrollbarPosition(mVerticalScrollbarPosition);
         mListView.setScrollBarStyle(ListView.SCROLLBARS_OUTSIDE_OVERLAY);
         int leftPadding = 0;
@@ -204,70 +198,62 @@ public class GroupBrowseListFragment extends Fragment
 
         @Override
         public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
-            mGroupListCursor = data;
-            bindGroupList();
+        	presenter.onGroupListLoadFinished(data);
         }
 
         public void onLoaderReset(Loader<Cursor> loader) {
         }
     };
 
-    private void bindGroupList() {
-        mEmptyView.setText(R.string.noGroups);
-        setAddAccountsVisibility(!ContactsUtils.areGroupWritableAccountsAvailable(mContext));
-        if (mGroupListCursor == null) {
-            return;
-        }
-        mAdapter.setCursor(mGroupListCursor);
 
-        if (mSelectionToScreenRequested) {
-            mSelectionToScreenRequested = false;
-            requestSelectionToScreen();
-        }
+	void updateGroupListAdapterAdapter(Cursor mGroupListCursor) {
+		mAdapter.setCursor(mGroupListCursor);
+	}
 
-        mSelectedGroupUri = mAdapter.getSelectedGroup();
-        if (mSelectionVisible && mSelectedGroupUri != null) {
-            viewGroup(mSelectedGroupUri);
-        }
-    }
+	void updateEmptyView() {
+		mEmptyView.setText(R.string.noGroups);
+	}
 
     public void setListener(OnGroupBrowserActionListener listener) {
         mListener = listener;
     }
 
     public void setSelectionVisible(boolean flag) {
-        mSelectionVisible = flag;
-        if (mAdapter != null) {
-            mAdapter.setSelectionVisible(mSelectionVisible);
-        }
+    	presenter.setSelectionVisible(flag);
     }
 
-    private void setSelectedGroup(Uri groupUri) {
-        mSelectedGroupUri = groupUri;
+	void updateSelectionVisible(boolean flag) {
+		if (mAdapter != null) {
+            mAdapter.setSelectionVisible(flag);
+        }
+	}
+
+    void setSelectedGroup(Uri groupUri) {
         mAdapter.setSelectedGroup(groupUri);
         mListView.invalidateViews();
     }
 
-    private void viewGroup(Uri groupUri) {
+    void viewGroup(Uri groupUri) {
         setSelectedGroup(groupUri);
-        if (mListener != null) mListener.onViewGroupAction(groupUri);
+        fireOnViewGroupAction(groupUri);
     }
+
+	void fireOnViewGroupAction(Uri groupUri) {
+		if (mListener != null) mListener.onViewGroupAction(groupUri);
+	}
 
     public void setSelectedUri(Uri groupUri) {
-        viewGroup(groupUri);
-        mSelectionToScreenRequested = true;
+    	presenter.setSelectedUri(groupUri);
     }
 
-    protected void requestSelectionToScreen() {
-        if (!mSelectionVisible) {
-            return; // If selection isn't visible we don't care.
-        }
-        int selectedPosition = mAdapter.getSelectedGroupPosition();
-        if (selectedPosition != -1) {
-            mListView.requestPositionToScreen(selectedPosition,
-                    true /* smooth scroll requested */);
-        }
-    }
+	void scrollGroupListToPosition(int selectedPosition) {
+		mListView.requestPositionToScreen(selectedPosition,
+		        true /* smooth scroll requested */);
+	}
+
+	int getSelectedGroupPosition() {
+		return mAdapter.getSelectedGroupPosition();
+	}
 
     private void hideSoftKeyboard() {
         if (mContext == null) {
@@ -303,7 +289,7 @@ public class GroupBrowseListFragment extends Fragment
     @Override
     public void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        outState.putParcelable(EXTRA_KEY_GROUP_URI, mSelectedGroupUri);
+        presenter.saveSelectedGroupUri(outState);
     }
 
     public void setAddAccountsVisibility(boolean visible) {
@@ -311,4 +297,8 @@ public class GroupBrowseListFragment extends Fragment
             mAddAccountsView.setVisibility(visible ? View.VISIBLE : View.GONE);
         }
     }
+
+	Uri getSelectedGroup() {
+		return  mAdapter.getSelectedGroup();
+	}
 }
