@@ -152,6 +152,7 @@ public class GroupDetailPresenter {
 
 	public void onMemberListLoadFinished(Cursor data) {
 		updateSize(data.getCount());
+		view.extracted(data);
 	}
 
 	/**

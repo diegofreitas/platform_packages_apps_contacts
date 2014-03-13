@@ -243,7 +243,7 @@ public class GroupDetailFragment extends Fragment implements OnScrollListener {
     /**
      * The listener for the group members list loader
      */
-    private final LoaderManager.LoaderCallbacks<Cursor> mGroupMemberListLoaderListener = //TODO Presenter pode implementar essa interface
+    private final LoaderManager.LoaderCallbacks<Cursor> mGroupMemberListLoaderListener =
             new LoaderCallbacks<Cursor>() {
 
         @Override
@@ -254,14 +254,14 @@ public class GroupDetailFragment extends Fragment implements OnScrollListener {
         @Override
         public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
         	groupDetailPresenter.onMemberListLoadFinished(data);
-            extracted(data);
+           
         }
 
         @Override
         public void onLoaderReset(Loader<Cursor> loader) {}
     };
     
-	private void extracted(Cursor data) {
+	void extracted(Cursor data) {
 		mAdapter.setContactCursor(data);
         mMemberListView.setEmptyView(mEmptyView);
 	}
