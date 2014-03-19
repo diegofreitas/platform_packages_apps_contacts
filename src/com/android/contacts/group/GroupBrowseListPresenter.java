@@ -1,13 +1,19 @@
 package com.android.contacts.group;
 
 import android.app.Activity;
+import android.app.LoaderManager.LoaderCallbacks;
+import android.content.Context;
+import android.content.CursorLoader;
+import android.content.Loader;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.view.inputmethod.InputMethodManager;
 
+import com.android.contacts.GroupListLoader;
 import com.android.contacts.common.ContactsUtils;
 
-public class GroupBrowseListPresenter {
+public class GroupBrowseListPresenter implements LoaderCallbacks<Cursor>{
 	
 	private static final String EXTRA_KEY_GROUP_URI = "groups.groupUri";
 	
@@ -54,14 +60,8 @@ public class GroupBrowseListPresenter {
         mSelectionToScreenRequested = true;
 	}
 
-	public void onGroupListLoadFinished(Cursor data) {
-		 mGroupListCursor = data;
-         bindGroupList();
-	}
-	
-
     private void bindGroupList() {
-        view.updateEmptyView();
+        view.resetEmptyView(false);
         view.setAddAccountsVisibility(!ContactsUtils.areGroupWritableAccountsAvailable(mContext));
         if (mGroupListCursor == null) {
             return;
@@ -93,5 +93,31 @@ public class GroupBrowseListPresenter {
 		 mSelectionVisible = flag;
 	     view.updateSelectionVisible(flag);
 	}
+
+	public void hideSoftKeyboard() {
+        if (mContext == null) {
+            return;
+        }
+        // Hide soft keyboard, if visible
+        InputMethodManager inputMethodManager = (InputMethodManager)
+                mContext.getSystemService(Context.INPUT_METHOD_SERVICE);
+        inputMethodManager.hideSoftInputFromWindow(view.getListViewToken(), 0);
+    }
+	
+	 @Override
+     public CursorLoader onCreateLoader(int id, Bundle args) {
+		 view.resetEmptyView(true);
+         return new GroupListLoader(mContext);
+     }
+
+     @Override
+     public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
+    	 mGroupListCursor = data;
+         bindGroupList();
+     }
+
+     public void onLoaderReset(Loader<Cursor> loader) {
+     }
+
 
 }

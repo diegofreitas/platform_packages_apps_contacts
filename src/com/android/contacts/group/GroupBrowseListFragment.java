@@ -16,17 +16,16 @@
 
 package com.android.contacts.group;
 
-import android.app.Activity;
 import android.app.Fragment;
 import android.app.LoaderManager;
 import android.app.LoaderManager.LoaderCallbacks;
-import android.content.Context;
 import android.content.CursorLoader;
 import android.content.Intent;
 import android.content.Loader;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.provider.ContactsContract;
 import android.provider.Settings;
 import android.view.LayoutInflater;
@@ -36,13 +35,11 @@ import android.view.View.OnClickListener;
 import android.view.View.OnFocusChangeListener;
 import android.view.View.OnTouchListener;
 import android.view.ViewGroup;
-import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
 import android.widget.ListView;
 import android.widget.TextView;
 
-import com.android.contacts.GroupListLoader;
 import com.android.contacts.R;
 import com.android.contacts.common.list.AutoScrollListView;
 import com.android.contacts.group.GroupBrowseListAdapter.GroupListItemViewCache;
@@ -67,16 +64,8 @@ public class GroupBrowseListFragment extends Fragment
 
     }
 
-    private static final String TAG = "GroupBrowseListFragment";
-
     private static final int LOADER_GROUPS = 1;
-
-    private Context mContext;
-
-
     
-  
-
     private View mRootView;
     private AutoScrollListView mListView;
     private TextView mEmptyView;
@@ -139,7 +128,7 @@ public class GroupBrowseListFragment extends Fragment
             }
         });
         mListView.setEmptyView(mEmptyView);
-        mAdapter = new GroupBrowseListAdapter(mContext);
+        mAdapter = new GroupBrowseListAdapter(this.getActivity());
 	}
 
     public void setVerticalScrollbarPosition(int position) {
@@ -156,62 +145,34 @@ public class GroupBrowseListFragment extends Fragment
         int leftPadding = 0;
         int rightPadding = 0;
         if (mVerticalScrollbarPosition == View.SCROLLBAR_POSITION_LEFT) {
-            leftPadding = mContext.getResources().getDimensionPixelOffset(
+            leftPadding = this.getActivity().getResources().getDimensionPixelOffset(
                     R.dimen.list_visible_scrollbar_padding);
         } else {
-            rightPadding = mContext.getResources().getDimensionPixelOffset(
+            rightPadding = this.getActivity().getResources().getDimensionPixelOffset(
                     R.dimen.list_visible_scrollbar_padding);
         }
         mListView.setPadding(leftPadding, mListView.getPaddingTop(),
                 rightPadding, mListView.getPaddingBottom());
     }
 
-    @Override
-    public void onAttach(Activity activity) {
-        super.onAttach(activity);
-        mContext = activity;
-    }
-
-    @Override
-    public void onDetach() {
-        super.onDetach();
-        mContext = null;
-    }
 
     @Override
     public void onStart() {
-        getLoaderManager().initLoader(LOADER_GROUPS, null, mGroupLoaderListener);
+        getLoaderManager().initLoader(LOADER_GROUPS, null, presenter);
         super.onStart();
     }
-
-    /**
-     * The listener for the group meta data loader for all groups.
-     */
-    private final LoaderManager.LoaderCallbacks<Cursor> mGroupLoaderListener =
-            new LoaderCallbacks<Cursor>() {
-
-        @Override
-        public CursorLoader onCreateLoader(int id, Bundle args) {
-            mEmptyView.setText(null);
-            return new GroupListLoader(mContext);
-        }
-
-        @Override
-        public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
-        	presenter.onGroupListLoadFinished(data);
-        }
-
-        public void onLoaderReset(Loader<Cursor> loader) {
-        }
-    };
-
+        
 
 	void updateGroupListAdapterAdapter(Cursor mGroupListCursor) {
 		mAdapter.setCursor(mGroupListCursor);
 	}
 
-	void updateEmptyView() {
-		mEmptyView.setText(R.string.noGroups);
+	void resetEmptyView(boolean clear) {
+		if(clear){
+			mEmptyView.setText(null);
+		} else {
+			mEmptyView.setText(R.string.noGroups);
+		}
 	}
 
     public void setListener(OnGroupBrowserActionListener listener) {
@@ -235,12 +196,8 @@ public class GroupBrowseListFragment extends Fragment
 
     void viewGroup(Uri groupUri) {
         setSelectedGroup(groupUri);
-        fireOnViewGroupAction(groupUri);
+        if (mListener != null) mListener.onViewGroupAction(groupUri);
     }
-
-	void fireOnViewGroupAction(Uri groupUri) {
-		if (mListener != null) mListener.onViewGroupAction(groupUri);
-	}
 
     public void setSelectedUri(Uri groupUri) {
     	presenter.setSelectedUri(groupUri);
@@ -255,24 +212,18 @@ public class GroupBrowseListFragment extends Fragment
 		return mAdapter.getSelectedGroupPosition();
 	}
 
-    private void hideSoftKeyboard() {
-        if (mContext == null) {
-            return;
-        }
-        // Hide soft keyboard, if visible
-        InputMethodManager inputMethodManager = (InputMethodManager)
-                mContext.getSystemService(Context.INPUT_METHOD_SERVICE);
-        inputMethodManager.hideSoftInputFromWindow(mListView.getWindowToken(), 0);
-    }
-
     /**
      * Dismisses the soft keyboard when the list takes focus.
      */
     @Override
     public void onFocusChange(View view, boolean hasFocus) {
         if (view == mListView && hasFocus) {
-            hideSoftKeyboard();
+            presenter.hideSoftKeyboard();
         }
+    }
+    
+    IBinder getListViewToken(){
+	    return mListView.getWindowToken();
     }
 
     /**
@@ -281,7 +232,7 @@ public class GroupBrowseListFragment extends Fragment
     @Override
     public boolean onTouch(View view, MotionEvent event) {
         if (view == mListView) {
-            hideSoftKeyboard();
+            presenter.hideSoftKeyboard();
         }
         return false;
     }
