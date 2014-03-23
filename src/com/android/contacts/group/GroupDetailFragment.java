@@ -21,7 +21,6 @@ import android.app.Fragment;
 import android.app.LoaderManager;
 import android.app.LoaderManager.LoaderCallbacks;
 import android.content.ContentUris;
-import android.content.Context;
 import android.content.CursorLoader;
 import android.content.Intent;
 import android.content.Loader;
@@ -53,233 +52,228 @@ import com.android.contacts.interactions.GroupDeletionDialogFragment;
 import com.android.contacts.list.GroupMemberTileAdapter;
 
 /**
- * Displays the details of a group and shows a list of actions possible for the group.
+ * Displays the details of a group and shows a list of actions possible for the
+ * group.
  */
 public class GroupDetailFragment extends Fragment implements OnScrollListener {
 
-    public static interface Listener {
-        /**
-         * The group title has been loaded
-         */
-        public void onGroupTitleUpdated(String title);
+	public static interface Listener {
+		/**
+		 * The group title has been loaded
+		 */
+		public void onGroupTitleUpdated(String title);
 
-        /**
-         * The number of group members has been determined
-         */
-        public void onGroupSizeUpdated(String size);
+		/**
+		 * The number of group members has been determined
+		 */
+		public void onGroupSizeUpdated(String size);
 
-        /**
-         * The account type and dataset have been determined.
-         */
-        public void onAccountTypeUpdated(String accountTypeString, String dataSet);
+		/**
+		 * The account type and dataset have been determined.
+		 */
+		public void onAccountTypeUpdated(String accountTypeString,
+				String dataSet);
 
-        /**
-         * User decided to go to Edit-Mode
-         */
-        public void onEditRequested(Uri groupUri);
+		/**
+		 * User decided to go to Edit-Mode
+		 */
+		public void onEditRequested(Uri groupUri);
 
-        /**
-         * Contact is selected and should launch details page
-         */
-        public void onContactSelected(Uri contactUri);
-    }
+		/**
+		 * Contact is selected and should launch details page
+		 */
+		public void onContactSelected(Uri contactUri);
+	}
 
-    private static final String TAG = "GroupDetailFragment";
+	private static final String TAG = "GroupDetailFragment";
 
-    private static final int LOADER_METADATA = 0;
-    private static final int LOADER_MEMBERS = 1;
+	private static final int LOADER_METADATA = 0;
+	private static final int LOADER_MEMBERS = 1;
+	
+	private View mRootView;
+	private ViewGroup mGroupSourceViewContainer;
+	private View mGroupSourceView;
+	private TextView mGroupTitle;
+	private TextView mGroupSize;
+	private ListView mMemberListView;
+	private View mEmptyView;
 
-    private Context mContext;
+	private Listener mListener;
 
-    private View mRootView;
-    private ViewGroup mGroupSourceViewContainer;
-    private View mGroupSourceView;
-    private TextView mGroupTitle;
-    private TextView mGroupSize;
-    private ListView mMemberListView;
-    private View mEmptyView;
+	private ContactTileAdapter mAdapter;
+	private ContactPhotoManager mPhotoManager;
 
-    private Listener mListener;
-
-    private ContactTileAdapter mAdapter;
-    private ContactPhotoManager mPhotoManager;
-    
-    private boolean mOptionsMenuGroupDeletable;
-    private boolean mOptionsMenuGroupEditable;
-    private boolean mCloseActivityAfterDelete;
+	private boolean mOptionsMenuGroupDeletable;
+	private boolean mOptionsMenuGroupEditable;
+	private boolean mCloseActivityAfterDelete;
 
 	private GroupDetailPresenter groupDetailPresenter;
 
-    public GroupDetailFragment() {
-    }
-
-    @Override
-    public void onAttach(Activity activity) {
-        super.onAttach(activity);
-        mContext = activity;
-        groupDetailPresenter = new GroupDetailPresenter(this);
-        groupDetailPresenter.performOnAttach();
-    }
-
-    //DONE
-	void buildContactAdapter() {
-		Resources res = getResources();
-        int columnCount = res.getInteger(R.integer.contact_tile_column_count);
-        mAdapter = new GroupMemberTileAdapter(mContext, mContactTileListener, columnCount);
+	public GroupDetailFragment() {
 	}
 
-    @Override
-    public void onDetach() {
-        super.onDetach();
-        mContext = null;
-    }
+	@Override
+	public void onAttach(Activity activity) {
+		super.onAttach(activity);
+		groupDetailPresenter = new GroupDetailPresenter(this);
+		groupDetailPresenter.performOnAttach();
+	}
 
-    @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedState) {
-        setHasOptionsMenu(true);
-        mRootView = inflater.inflate(R.layout.group_detail_fragment, container, false);
-        mGroupTitle = (TextView) mRootView.findViewById(R.id.group_title);
-        mGroupSize = (TextView) mRootView.findViewById(R.id.group_size);
-        mGroupSourceViewContainer = (ViewGroup) mRootView.findViewById(
-                R.id.group_source_view_container);
-        mEmptyView = mRootView.findViewById(android.R.id.empty);
-        mMemberListView = (ListView) mRootView.findViewById(android.R.id.list);
-        mMemberListView.setItemsCanFocus(true);
-        mMemberListView.setAdapter(mAdapter);
-        return mRootView;
-    }
+	void buildContactAdapter() {
+		Resources res = getResources();
+		int columnCount = res.getInteger(R.integer.contact_tile_column_count);
+		mAdapter = new GroupMemberTileAdapter(this.getActivity(),
+				mContactTileListener, columnCount);
+	}
 
-    public void loadGroup(Uri groupUri) {
-        groupDetailPresenter.loadGroup( groupUri);
-        
-    }
+	@Override
+	public View onCreateView(LayoutInflater inflater, ViewGroup container,
+			Bundle savedState) {
+		setHasOptionsMenu(true);
+		mRootView = inflater.inflate(R.layout.group_detail_fragment, container,
+				false);
+		mGroupTitle = (TextView) mRootView.findViewById(R.id.group_title);
+		mGroupSize = (TextView) mRootView.findViewById(R.id.group_size);
+		mGroupSourceViewContainer = (ViewGroup) mRootView
+				.findViewById(R.id.group_source_view_container);
+		mEmptyView = mRootView.findViewById(android.R.id.empty);
+		mMemberListView = (ListView) mRootView.findViewById(android.R.id.list);
+		mMemberListView.setItemsCanFocus(true);
+		mMemberListView.setAdapter(mAdapter);
+		return mRootView;
+	}
 
-    public void setQuickContact(boolean enableQuickContact) {
-        mAdapter.enableQuickContact(enableQuickContact);
-    }
+	public void loadGroup(Uri groupUri) {
+		groupDetailPresenter.loadGroup(groupUri);
 
-    //DONE
-    void configurePhotoLoader() {
-        if (mContext != null) {
-            if (mPhotoManager == null) {
-                mPhotoManager = ContactPhotoManager.getInstance(mContext);
-            }
-            if (mMemberListView != null) {
-                mMemberListView.setOnScrollListener(this);
-            }
-            if (mAdapter != null) {
-                mAdapter.setPhotoLoader(mPhotoManager);
-            }
-        }
-    }
+	}
 
-    public void setListener(Listener value) {
-        mListener = value;
-    }
+	public void setQuickContact(boolean enableQuickContact) {
+		mAdapter.enableQuickContact(enableQuickContact);
+	}
 
-    public void setShowGroupSourceInActionBar(boolean show) {
-        this.groupDetailPresenter.setShowGroupSourceInActionBar(show);
-    }
+	// DONE
+	void configurePhotoLoader() {
+		if (mPhotoManager == null) {
+			mPhotoManager = ContactPhotoManager.getInstance(this.getActivity());
+		}
+		if (mMemberListView != null) {
+			mMemberListView.setOnScrollListener(this);
+		}
+		if (mAdapter != null) {
+			mAdapter.setPhotoLoader(mPhotoManager);
+		}
 
-    public Uri getGroupUri() {
-        return groupDetailPresenter.getGroupUri();
-    }
+	}
 
-    /**
-     * Start the loader to retrieve the metadata for this group.
-     */
-    void startGroupMetadataLoader() {
-        getLoaderManager().restartLoader(LOADER_METADATA, null, mGroupMetadataLoaderListener);
-    }
+	public void setListener(Listener value) {
+		mListener = value;
+	}
 
-    /**
-     * Start the loader to retrieve the list of group members.
-     */
-    void startGroupMembersLoader() {
-        getLoaderManager().restartLoader(LOADER_MEMBERS, null, mGroupMemberListLoaderListener);
-    }
+	public void setShowGroupSourceInActionBar(boolean show) {
+		this.groupDetailPresenter.setShowGroupSourceInActionBar(show);
+	}
 
-    private final ContactTileView.Listener mContactTileListener =
-            new ContactTileView.Listener() {
+	public Uri getGroupUri() {
+		return groupDetailPresenter.getGroupUri();
+	}
 
-        @Override
-        public void onContactSelected(Uri contactUri, Rect targetRect) {
-            mListener.onContactSelected(contactUri);
-        }
+	/**
+	 * Start the loader to retrieve the metadata for this group.
+	 */
+	void startGroupMetadataLoader() {
+		getLoaderManager().restartLoader(LOADER_METADATA, null,
+				mGroupMetadataLoaderListener);
+	}
 
-        @Override
-        public void onCallNumberDirectly(String phoneNumber) {
-            // No need to call phone number directly from People app.
-            Log.w(TAG, "unexpected invocation of onCallNumberDirectly()");
-        }
+	/**
+	 * Start the loader to retrieve the list of group members.
+	 */
+	void startGroupMembersLoader() {
+		getLoaderManager().restartLoader(LOADER_MEMBERS, null,
+				mGroupMemberListLoaderListener);
+	}
 
-        @Override
-        public int getApproximateTileWidth() {
-            return getView().getWidth() / mAdapter.getColumnCount();
-        }
-    };
+	private final ContactTileView.Listener mContactTileListener = new ContactTileView.Listener() {
 
-    /**
-     * The listener for the group metadata loader.
-     */
-    private final LoaderManager.LoaderCallbacks<Cursor> mGroupMetadataLoaderListener =
-            new LoaderCallbacks<Cursor>() {
+		@Override
+		public void onContactSelected(Uri contactUri, Rect targetRect) {
+			mListener.onContactSelected(contactUri);
+		}
 
-        @Override
-        public CursorLoader onCreateLoader(int id, Bundle args) {
-            return groupDetailPresenter.createGroupMetadataLoader();
-        }
+		@Override
+		public void onCallNumberDirectly(String phoneNumber) {
+			// No need to call phone number directly from People app.
+			Log.w(TAG, "unexpected invocation of onCallNumberDirectly()");
+		}
 
-        @Override
-        public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
-        	groupDetailPresenter.performGroupLoadFinished(data);
-        }
+		@Override
+		public int getApproximateTileWidth() {
+			return getView().getWidth() / mAdapter.getColumnCount();
+		}
+	};
 
-        @Override
-        public void onLoaderReset(Loader<Cursor> loader) {}
-    };
-    
+	/**
+	 * The listener for the group metadata loader.
+	 */
+	private final LoaderManager.LoaderCallbacks<Cursor> mGroupMetadataLoaderListener = new LoaderCallbacks<Cursor>() {
 
-    /**
-     * The listener for the group members list loader
-     */
-    private final LoaderManager.LoaderCallbacks<Cursor> mGroupMemberListLoaderListener =
-            new LoaderCallbacks<Cursor>() {
+		@Override
+		public CursorLoader onCreateLoader(int id, Bundle args) {
+			return groupDetailPresenter.createGroupMetadataLoader();
+		}
 
-        @Override
-        public CursorLoader onCreateLoader(int id, Bundle args) {
-            return groupDetailPresenter.creatGroupMemberListLoader();
-        }
+		@Override
+		public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
+			groupDetailPresenter.performGroupLoadFinished(data);
+		}
 
-        @Override
-        public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
-        	groupDetailPresenter.onMemberListLoadFinished(data);
-           
-        }
+		@Override
+		public void onLoaderReset(Loader<Cursor> loader) {
+		}
+	};
 
-        @Override
-        public void onLoaderReset(Loader<Cursor> loader) {}
-    };
-    
+	/**
+	 * The listener for the group members list loader
+	 */
+	private final LoaderManager.LoaderCallbacks<Cursor> mGroupMemberListLoaderListener = new LoaderCallbacks<Cursor>() {
+
+		@Override
+		public CursorLoader onCreateLoader(int id, Bundle args) {
+			return groupDetailPresenter.creatGroupMemberListLoader();
+		}
+
+		@Override
+		public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
+			groupDetailPresenter.onMemberListLoadFinished(data);
+
+		}
+
+		@Override
+		public void onLoaderReset(Loader<Cursor> loader) {
+		}
+	};
+
 	void extracted(Cursor data) {
 		mAdapter.setContactCursor(data);
-        mMemberListView.setEmptyView(mEmptyView);
+		mMemberListView.setEmptyView(mEmptyView);
 	}
 
 	void rebindDataToGroupSourceView(final String accountTypeString,
 			final String dataSet, final AccountType accountType) {
 		mGroupSourceView.setVisibility(View.VISIBLE);
-		GroupDetailDisplayUtils.bindGroupSourceView(mContext, mGroupSourceView,
-		        accountTypeString, dataSet);
+		GroupDetailDisplayUtils.bindGroupSourceView(this.getActivity(), mGroupSourceView,
+				accountTypeString, dataSet);
 		mGroupSourceView.setOnClickListener(new OnClickListener() {
-		    @Override
-		    public void onClick(View v) {
-		        final Uri uri = ContentUris.withAppendedId(Groups.CONTENT_URI, groupDetailPresenter.getGroupId());
-		        final Intent intent = new Intent(Intent.ACTION_VIEW, uri);
-		        intent.setClassName(accountType.syncAdapterPackageName,
-		                accountType.getViewGroupActivity());
-		        startActivity(intent);
-		    }
+			@Override
+			public void onClick(View v) {
+				final Uri uri = ContentUris.withAppendedId(Groups.CONTENT_URI,
+						groupDetailPresenter.getGroupId());
+				final Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+				intent.setClassName(accountType.syncAdapterPackageName,
+						accountType.getViewGroupActivity());
+				startActivity(intent);
+			}
 		});
 	}
 
@@ -287,7 +281,8 @@ public class GroupDetailFragment extends Fragment implements OnScrollListener {
 		mGroupSourceView.setVisibility(View.GONE);
 	}
 
-	void onAccountTypeUpdated(final String accountTypeString, final String dataSet) {
+	void onAccountTypeUpdated(final String accountTypeString,
+			final String dataSet) {
 		mListener.onAccountTypeUpdated(accountTypeString, dataSet);
 	}
 
@@ -300,7 +295,8 @@ public class GroupDetailFragment extends Fragment implements OnScrollListener {
 	}
 
 	void createGroupSourceView() {
-		mGroupSourceView = GroupDetailDisplayUtils.getNewGroupSourceView(mContext);
+		mGroupSourceView = GroupDetailDisplayUtils
+				.getNewGroupSourceView(this.getActivity());
 	}
 
 	boolean hasNotGroupSourceView() {
@@ -308,92 +304,93 @@ public class GroupDetailFragment extends Fragment implements OnScrollListener {
 	}
 
 	void refreshOptions() {
-		getActivity().invalidateOptionsMenu ();
+		getActivity().invalidateOptionsMenu();
 	}
 
-    void updateTitle(String title) {
-        if (mGroupTitle != null) {
-            mGroupTitle.setText(title);
-        } else {
-            mListener.onGroupTitleUpdated(title);
-        }
-    }
-
+	void updateTitle(String title) {
+		if (mGroupTitle != null) {
+			mGroupTitle.setText(title);
+		} else {
+			mListener.onGroupTitleUpdated(title);
+		}
+	}
 
 	void updateGroupSizeView(String groupSizeString) {
 		if (mGroupSize != null) {
-            mGroupSize.setText(groupSizeString);
-        } else {
-            mListener.onGroupSizeUpdated(groupSizeString);
-        }
+			mGroupSize.setText(groupSizeString);
+		} else {
+			mListener.onGroupSizeUpdated(groupSizeString);
+		}
 	}
 
+	@Override
+	public void onScroll(AbsListView view, int firstVisibleItem,
+			int visibleItemCount, int totalItemCount) {
+	}
 
-    @Override
-    public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount,
-            int totalItemCount) {
-    }
+	@Override
+	public void onScrollStateChanged(AbsListView view, int scrollState) {
+		if (scrollState == OnScrollListener.SCROLL_STATE_FLING) {
+			mPhotoManager.pause();
+		} else {
+			mPhotoManager.resume();
+		}
+	}
 
-    @Override
-    public void onScrollStateChanged(AbsListView view, int scrollState) {
-        if (scrollState == OnScrollListener.SCROLL_STATE_FLING) {
-            mPhotoManager.pause();
-        } else {
-            mPhotoManager.resume();
-        }
-    }
+	@Override
+	public void onCreateOptionsMenu(Menu menu, final MenuInflater inflater) {
+		inflater.inflate(R.menu.view_group, menu);
+	}
 
-    @Override
-    public void onCreateOptionsMenu(Menu menu, final MenuInflater inflater) {
-        inflater.inflate(R.menu.view_group, menu);
-    }
+	public boolean isOptionsMenuChanged() {
+		return mOptionsMenuGroupDeletable != isGroupDeletable()
+				&& mOptionsMenuGroupEditable != isGroupEditableAndPresent();
+	}
 
-    public boolean isOptionsMenuChanged() {
-        return mOptionsMenuGroupDeletable != isGroupDeletable() &&
-                mOptionsMenuGroupEditable != isGroupEditableAndPresent();
-    }
+	public boolean isGroupDeletable() {
+		return groupDetailPresenter.isGroupDeletable();
+	}
 
-    public boolean isGroupDeletable() {
-        return groupDetailPresenter.isGroupDeletable();
-    }
+	public boolean isGroupEditableAndPresent() {
+		return groupDetailPresenter.isGroupEditableAndPresent();
+	}
 
-    public boolean isGroupEditableAndPresent() {
-        return groupDetailPresenter.isGroupEditableAndPresent();
-    }
+	@Override
+	public void onPrepareOptionsMenu(Menu menu) {
+		mOptionsMenuGroupDeletable = isGroupDeletable() && isVisible();
+		mOptionsMenuGroupEditable = isGroupEditableAndPresent() && isVisible();
 
-    @Override
-    public void onPrepareOptionsMenu(Menu menu) {
-        mOptionsMenuGroupDeletable = isGroupDeletable() && isVisible();
-        mOptionsMenuGroupEditable = isGroupEditableAndPresent() && isVisible();
+		final MenuItem editMenu = menu.findItem(R.id.menu_edit_group);
+		editMenu.setVisible(mOptionsMenuGroupEditable);
 
-        final MenuItem editMenu = menu.findItem(R.id.menu_edit_group);
-        editMenu.setVisible(mOptionsMenuGroupEditable);
+		final MenuItem deleteMenu = menu.findItem(R.id.menu_delete_group);
+		deleteMenu.setVisible(mOptionsMenuGroupDeletable);
+	}
 
-        final MenuItem deleteMenu = menu.findItem(R.id.menu_delete_group);
-        deleteMenu.setVisible(mOptionsMenuGroupDeletable);
-    }
+	@Override
+	public boolean onOptionsItemSelected(MenuItem item) {
+		switch (item.getItemId()) {
+		case R.id.menu_edit_group: {
+			if (mListener != null)
+				mListener.onEditRequested(groupDetailPresenter.getGroupUri());
+			break;
+		}
+		case R.id.menu_delete_group: {
+			GroupDeletionDialogFragment.show(getFragmentManager(),
+					groupDetailPresenter.getGroupId(),
+					groupDetailPresenter.getGroupName(),
+					mCloseActivityAfterDelete);
+			return true;
+		}
+		}
+		return false;
+	}
 
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
-            case R.id.menu_edit_group: {
-                if (mListener != null) mListener.onEditRequested(groupDetailPresenter.getGroupUri());
-                break;
-            }
-            case R.id.menu_delete_group: {
-                GroupDeletionDialogFragment.show(getFragmentManager(), groupDetailPresenter.getGroupId(), groupDetailPresenter.getGroupName(),
-                        mCloseActivityAfterDelete);
-                return true;
-            }
-        }
-        return false;
-    }
+	public void closeActivityAfterDelete(boolean closeActivity) {
+		mCloseActivityAfterDelete = closeActivity;
+	}
 
-    public void closeActivityAfterDelete(boolean closeActivity) {
-        mCloseActivityAfterDelete = closeActivity;
-    }
-
-    public long getGroupId() {
-        return groupDetailPresenter.getGroupId();
-    }
+	public long getGroupId() {
+		return groupDetailPresenter.getGroupId();
+	}
 }
